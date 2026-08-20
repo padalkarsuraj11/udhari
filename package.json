@@ -1,0 +1,17 @@
+{
+  "name": "udhari-platform",
+  "version": "1.0.0",
+  "description": "Trade Credit & Udhari Management Platform",
+  "private": true,
+  "workspaces": [
+    "packages/admin",
+    "packages/client",
+    "packages/backend"
+  ],
+  "scripts": {
+    "dev:admin": "cd packages/admin && npm run dev",
+    "dev:client": "cd packages/client && npm run dev",
+    "dev:backend": "cd packages/backend && npm run dev",
+    "install:all": "npm install --workspaces"
+  }
+}
