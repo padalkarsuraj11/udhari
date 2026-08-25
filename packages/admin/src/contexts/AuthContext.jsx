@@ -72,21 +72,6 @@ export function AuthProvider({ children }) {
     session,
     loading,
     signIn: async (email, password) => {
-      // Demo credentials fallback
-      if (email === 'admin@udhari.io' && password === 'admin123') {
-        const demoUser = {
-          id: 'admin-001',
-          email: 'admin@udhari.io',
-          role: 'platform_admin',
-          full_name: 'Platform Admin'
-        };
-        localStorage.setItem('admin_user', JSON.stringify(demoUser));
-        localStorage.setItem('admin_token', 'demo-admin-token');
-        setUser(demoUser);
-        setSession({ access_token: 'demo-admin-token' });
-        return { user: demoUser };
-      }
-
       const apiUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:4000/api';
 
       try {

@@ -152,14 +152,16 @@ RLS is the **PRIMARY** mechanism for tenant isolation. All tenant-scoped tables 
 
 ### Owner Business Data (`/api/*`)
 
-All tenant-scoped routes automatically filter by `req.ownerId`:
-- `/api/contractors` — Contractor management
-- `/api/customers` — Customer/project management
-- `/api/materials` — Material catalog
-- `/api/transactions` — Material issue transactions
-- `/api/payments` — Payment receipts
-- `/api/bills` — Bill generation
-- `/api/risk` — Risk assessment
+All tenant-scoped routes automatically filter by `req.tenantId`:
+- `/api/owner/profile` — Get logged-in owner's profile + tenant details
+- `/api/owner/dashboard` — Get dashboard statistics (outstanding, overdue, collection rate, etc.)
+- `/api/contractors` — Contractor management (stub → Phase 3)
+- `/api/customers` — Customer/project management (stub → Phase 3)
+- `/api/materials` — Material catalog (stub → Phase 3)
+- `/api/transactions` — Material issue transactions (stub → Phase 3)
+- `/api/payments` — Payment receipts (stub → Phase 3)
+- `/api/bills` — Bill generation (stub → Phase 3)
+- `/api/risk` — Risk assessment (stub → Phase 3)
 
 ## Security Considerations
 
@@ -260,6 +262,7 @@ supabase db push
 
 - `001_initial_schema.sql` — Core tables, RLS policies, indexes
 - `002_rls_enhancements.sql` — Helper functions, triggers, additional policies
+- `003_fixes_and_enhancements.sql` — Add country column, fix handle_new_user trigger, performance indexes, and policy cleanups
 
 ## Testing
 
@@ -343,9 +346,24 @@ Client frontend runs on `http://localhost:5174`
 
 ## Creating First Admin User
 
-Since the platform requires an admin to create owners, you need to create the first admin user manually:
+Since the platform requires an admin to create owners, you need to create the first admin user. We have provided an automated setup script to provision this user and configure their roles correctly:
 
-**Via Supabase Dashboard:**
+**Via Setup Script:**
+
+1. Navigate to the backend directory:
+   ```bash
+   cd packages/backend
+   ```
+2. Run the admin setup script:
+   ```bash
+   node scripts/setup-admin.js --email admin@udhari.io --password YourSecurePasswordHere --name "Platform Admin"
+   ```
+   This script will:
+   - Create/promote the auth user in Supabase.
+   - Configure their `app_metadata.role` to `platform_admin`.
+   - Insert/update their record in `user_profiles` with the correct role.
+
+**Via Supabase Dashboard (Manual):**
 
 1. Go to Authentication → Users
 2. Click "Add User"
@@ -357,16 +375,6 @@ Since the platform requires an admin to create owners, you need to create the fi
 UPDATE user_profiles
 SET role = 'platform_admin'
 WHERE id = '<auth-user-id>';
-```
-
-**Via Supabase CLI:**
-
-```bash
-supabase db execute "
-UPDATE user_profiles
-SET role = 'platform_admin'
-WHERE id = (SELECT id FROM auth.users WHERE email = 'admin@udhari.io');
-"
 ```
 
 ## Known Limitations / Future Work

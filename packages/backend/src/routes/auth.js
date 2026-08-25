@@ -130,13 +130,21 @@ router.post('/logout', requireAuth, async (req, res, next) => {
       return res.json({ success: true, message: 'Logged out' });
     }
 
+    // Get tenant_id from user_profiles (reliable source)
+    const { data: profile } = await supabase
+      .from('user_profiles')
+      .select('tenant_id')
+      .eq('id', req.user.id)
+      .maybeSingle();
+
     // Log logout
     await supabase.from('audit_logs').insert({
-      tenant_id: req.user.user_metadata?.tenant_id,
-      user_id: req.user.id,
-      action: 'user_logout',
+      tenant_id: profile?.tenant_id || null,
+      user_id:   req.user.id,
+      action:    'user_logout',
       resource_type: 'auth',
-      resource_id: req.user.id,
+      resource_id:   req.user.id,
+      metadata: { email: req.user.email },
     });
 
     // Sign out from Supabase

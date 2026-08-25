@@ -12,8 +12,40 @@ import {
   ReportsPage, SettingsPage,
 } from './pages/Placeholders';
 
+// ── Account Deactivated Screen ──
+function AccountInactiveScreen({ status, signOut }) {
+  return (
+    <div style={{
+      display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+      height: '100vh', padding: 40, textAlign: 'center',
+      background: 'var(--bg-base)',
+    }}>
+      <div style={{
+        width: 80, height: 80, borderRadius: '50%',
+        background: 'rgba(239,68,68,0.1)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        marginBottom: 24,
+      }}>
+        <span style={{ fontSize: 36 }}>🔒</span>
+      </div>
+      <h1 style={{ fontSize: 22, fontWeight: 800, marginBottom: 8 }}>
+        Account {status === 'suspended' ? 'Suspended' : 'Deactivated'}
+      </h1>
+      <p style={{ fontSize: 14, color: 'var(--text-secondary)', maxWidth: 400, marginBottom: 32, lineHeight: 1.6 }}>
+        {status === 'suspended'
+          ? 'Your account has been suspended. Please contact your platform administrator for assistance.'
+          : 'Your business account has been deactivated. Please contact your platform administrator to restore access.'}
+      </p>
+      <button className="btn btn-secondary btn-sm" onClick={signOut}>
+        Sign Out
+      </button>
+    </div>
+  );
+}
+
+// ── Auth Guard ──
 function RequireAuth({ children }) {
-  const { user, loading } = useAuth();
+  const { user, loading, tenantStatus, signOut } = useAuth();
 
   if (loading) {
     return (
@@ -24,6 +56,12 @@ function RequireAuth({ children }) {
   }
 
   if (!user) return <Navigate to="/login" replace />;
+
+  // If tenant status is known and not active — block all app navigation
+  if (tenantStatus && tenantStatus !== 'active') {
+    return <AccountInactiveScreen status={tenantStatus} signOut={signOut} />;
+  }
+
   return children;
 }
 

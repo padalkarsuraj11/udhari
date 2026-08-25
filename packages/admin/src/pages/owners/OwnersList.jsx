@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, Eye, Edit, UserCheck, UserX, Filter, Download } from 'lucide-react';
+import { Plus, Eye, Edit, UserCheck, UserX, Filter, Download, Trash2, Pause } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import CreateOwnerModal from '../../components/CreateOwnerModal';
 import { formatCurrency, formatDate, formatRelativeDate, getRiskLevel } from '../../utils/format';
@@ -82,27 +82,41 @@ export default function OwnersList() {
 
   async function doToggle() {
     const { id, action } = confirm;
-    const newStatus = action === 'activate' ? 'active' : 'inactive';
+    const apiUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:4000/api';
 
     try {
-      const apiUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:4000/api';
-      const response = await fetch(`${apiUrl}/admin/owners/${id}/status`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({ status: newStatus }),
-      });
+      if (action === 'delete') {
+        const response = await fetch(`${apiUrl}/admin/owners/${id}`, {
+          method: 'DELETE',
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`,
+          },
+        });
 
-      if (!response.ok) throw new Error('Failed to update status');
+        if (!response.ok) throw new Error('Failed to delete owner');
 
-      // Update local state
-      setOwners(prev => prev.map(o =>
-        o.id === id ? { ...o, status: newStatus } : o
-      ));
+        // Update local state - remove the owner
+        setOwners(prev => prev.filter(o => o.id !== id));
+      } else {
+        const newStatus = action === 'activate' ? 'active' : action === 'suspend' ? 'suspended' : 'inactive';
+        const response = await fetch(`${apiUrl}/admin/owners/${id}/status`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({ status: newStatus }),
+        });
+
+        if (!response.ok) throw new Error('Failed to update status');
+
+        // Update local state
+        setOwners(prev => prev.map(o =>
+          o.id === id ? { ...o, status: newStatus } : o
+        ));
+      }
     } catch (err) {
-      console.error('Status update error:', err);
+      console.error(`${action} operation failed:`, err);
     } finally {
       setConfirm(null);
     }
@@ -255,16 +269,27 @@ export default function OwnersList() {
                           <Edit size={13} />
                         </button>
                         {owner.status === 'active' ? (
-                          <button
-                            className="btn btn-danger btn-sm"
-                            title="Deactivate"
-                            onClick={() => handleToggleStatus(owner.id, 'deactivate')}
-                          >
-                            <UserX size={13} />
-                          </button>
+                          <>
+                            <button
+                              className="btn btn-ghost btn-sm"
+                              title="Pause / Suspend"
+                              onClick={() => handleToggleStatus(owner.id, 'suspend')}
+                              style={{ color: 'var(--warning)' }}
+                            >
+                              <Pause size={13} />
+                            </button>
+                            <button
+                              className="btn btn-ghost btn-sm"
+                              title="Deactivate"
+                              onClick={() => handleToggleStatus(owner.id, 'deactivate')}
+                              style={{ color: 'var(--text-muted)' }}
+                            >
+                              <UserX size={13} />
+                            </button>
+                          </>
                         ) : (
                           <button
-                            className="btn btn-secondary btn-sm"
+                            className="btn btn-ghost btn-sm"
                             title="Activate"
                             onClick={() => handleToggleStatus(owner.id, 'activate')}
                             style={{ color: 'var(--success)' }}
@@ -272,6 +297,14 @@ export default function OwnersList() {
                             <UserCheck size={13} />
                           </button>
                         )}
+                        <button
+                          className="btn btn-ghost btn-sm"
+                          title="Delete Owner"
+                          onClick={() => handleToggleStatus(owner.id, 'delete')}
+                          style={{ color: 'var(--danger)' }}
+                        >
+                          <Trash2 size={13} />
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -290,14 +323,25 @@ export default function OwnersList() {
       {/* Confirm Dialog */}
       <ConfirmDialog
         isOpen={!!confirm}
-        title={confirm?.action === 'activate' ? 'Activate Owner?' : 'Deactivate Owner?'}
-        message={
-          confirm?.action === 'activate'
-            ? 'This will restore login access and platform features for this owner.'
-            : 'This will suspend the owner\'s access to the platform immediately.'
+        title={
+          confirm?.action === 'activate' ? 'Activate Owner?' :
+          confirm?.action === 'suspend' ? 'Pause Owner?' :
+          confirm?.action === 'deactivate' ? 'Deactivate Owner?' :
+          'Delete Owner?'
         }
-        confirmLabel={confirm?.action === 'activate' ? 'Activate' : 'Deactivate'}
-        variant={confirm?.action === 'activate' ? 'secondary' : 'danger'}
+        message={
+          confirm?.action === 'activate' ? 'This will restore login access and platform features for this owner.' :
+          confirm?.action === 'suspend' ? 'This will temporarily pause the owner\'s access to the platform.' :
+          confirm?.action === 'deactivate' ? 'This will block the owner\'s access to the platform.' :
+          'Are you sure you want to delete this owner? This action is permanent and will delete the business account and all associated data!'
+        }
+        confirmLabel={
+          confirm?.action === 'activate' ? 'Activate' :
+          confirm?.action === 'suspend' ? 'Pause' :
+          confirm?.action === 'deactivate' ? 'Deactivate' :
+          'Delete'
+        }
+        variant={confirm?.action === 'delete' ? 'danger' : 'secondary'}
         onConfirm={doToggle}
         onCancel={() => setConfirm(null)}
       />

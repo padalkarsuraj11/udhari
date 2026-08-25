@@ -1,9 +1,9 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
 import { Plus, Home, ChevronRight, ChevronDown } from 'lucide-react';
-import { CONTRACTORS, CUSTOMERS } from '../../data/mockData';
-import { formatCurrency, formatDate } from '../../utils/format';
-import { PageHeader, SearchInput, Select, StatusBadge, Avatar, EmptyState } from '../../components/ui';
+import { useCustomers, useContractors } from '../../lib/api';
+import { formatCurrency } from '../../utils/format';
+import { PageHeader, SearchInput, Select, StatusBadge, Avatar, EmptyState, LoadingState, ErrorState } from '../../components/ui';
+import { AddCustomerModal } from '../../components/modals';
 
 const TYPE_OPTIONS = [
   { value: 'Residential', label: 'Residential' },
@@ -18,26 +18,33 @@ const STATUS_OPTIONS = [
 ];
 
 export default function CustomersList() {
-  const [search,         setSearch]         = useState('');
-  const [typeFilter,     setTypeFilter]      = useState('');
-  const [statusFilter,   setStatusFilter]    = useState('');
-  const [contractorFilter, setContractorFilter] = useState('');
-  const [expandedContractors, setExpandedContractors] = useState(
-    CONTRACTORS.reduce((acc, c) => ({ ...acc, [c.id]: true }), {})
-  );
+  const { data: customers, loading: loadingCustomers, error: errorCustomers, refetch: refetchCustomers } = useCustomers();
+  const { data: contractors, loading: loadingContractors, error: errorContractors, refetch: refetchContractors } = useContractors();
 
-  const contractorOptions = CONTRACTORS.map(c => ({ value: c.id, label: c.name }));
+  const [search,           setSearch]           = useState('');
+  const [typeFilter,       setTypeFilter]       = useState('');
+  const [statusFilter,     setStatusFilter]     = useState('');
+  const [contractorFilter, setContractorFilter] = useState('');
+  const [showAddModal,     setShowAddModal]     = useState(false);
+  const [selectedConId,    setSelectedConId]    = useState(null);
+
+  const [expandedContractors, setExpandedContractors] = useState({});
+
+  const listCustomers = customers || [];
+  const listContractors = contractors || [];
+
+  const contractorOptions = listContractors.map(c => ({ value: c.id, label: c.name }));
 
   function toggleContractor(id) {
     setExpandedContractors(prev => ({ ...prev, [id]: !prev[id] }));
   }
 
   // Filter customers
-  const filteredCustomers = CUSTOMERS.filter(c => {
+  const filteredCustomers = listCustomers.filter(c => {
     const matchSearch = !search ||
       c.name.toLowerCase().includes(search.toLowerCase()) ||
-      c.address.toLowerCase().includes(search.toLowerCase()) ||
-      c.contractorName.toLowerCase().includes(search.toLowerCase());
+      (c.address || '').toLowerCase().includes(search.toLowerCase()) ||
+      (c.contractorName || '').toLowerCase().includes(search.toLowerCase());
     const matchType       = !typeFilter       || c.type === typeFilter;
     const matchStatus     = !statusFilter     || c.status === statusFilter;
     const matchContractor = !contractorFilter || c.contractorId === contractorFilter;
@@ -45,10 +52,23 @@ export default function CustomersList() {
   });
 
   // Group by contractor for hierarchy view
-  const groupedByContractor = CONTRACTORS.map(contractor => ({
+  const groupedByContractor = listContractors.map(contractor => ({
     contractor,
     customers: filteredCustomers.filter(c => c.contractorId === contractor.id),
   })).filter(group => group.customers.length > 0);
+
+  const loading = loadingCustomers || loadingContractors;
+  const error = errorCustomers || errorContractors;
+
+  const handleOpenAddModal = (conId = null) => {
+    setSelectedConId(conId);
+    setShowAddModal(true);
+  };
+
+  const handleRefresh = () => {
+    refetchCustomers();
+    refetchContractors();
+  };
 
   return (
     <div>
@@ -56,7 +76,7 @@ export default function CustomersList() {
         title="Customers & Projects"
         description="Projects organized by contractor — the full business hierarchy"
         actions={
-          <button className="btn btn-primary btn-sm">
+          <button className="btn btn-primary btn-sm" onClick={() => handleOpenAddModal(null)}>
             <Plus size={14} /> Add Customer
           </button>
         }
@@ -120,12 +140,23 @@ export default function CustomersList() {
       </div>
 
       {/* Results summary */}
-      <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>
-        Showing {filteredCustomers.length} of {CUSTOMERS.length} customers across {groupedByContractor.length} contractors
-      </div>
+      {!loading && !error && (
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+            Showing {filteredCustomers.length} of {listCustomers.length} customers across {groupedByContractor.length} contractors
+          </div>
+          <button className="btn btn-ghost btn-sm" onClick={handleRefresh}>
+            ↻ Refresh
+          </button>
+        </div>
+      )}
 
       {/* Hierarchy View */}
-      {groupedByContractor.length === 0 ? (
+      {loading ? (
+        <LoadingState message="Loading customers & projects..." />
+      ) : error ? (
+        <ErrorState message={error} onRetry={handleRefresh} />
+      ) : groupedByContractor.length === 0 ? (
         <div className="card">
           <EmptyState
             icon={Home}
@@ -136,8 +167,8 @@ export default function CustomersList() {
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           {groupedByContractor.map(({ contractor, customers }) => {
-            const isExpanded = expandedContractors[contractor.id];
-            const totalOutstanding = customers.reduce((s, c) => s + c.outstanding, 0);
+            const isExpanded = expandedContractors[contractor.id] ?? true;
+            const totalOutstanding = customers.reduce((s, c) => s + (c.outstanding || 0), 0);
 
             return (
               <div key={contractor.id} className="card" style={{ padding: 0, overflow: 'hidden' }}>
@@ -203,7 +234,7 @@ export default function CustomersList() {
                           <div>
                             <div style={{ fontWeight: 600, fontSize: 13 }}>{customer.name}</div>
                             <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                              {customer.type} · {customer.address}
+                              {customer.type} · {customer.address || 'No address'}
                             </div>
                           </div>
                         </div>
@@ -211,18 +242,18 @@ export default function CustomersList() {
                         <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
                           <div style={{ textAlign: 'right' }}>
                             <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Issued</div>
-                            <div style={{ fontWeight: 600, fontSize: 13 }}>{formatCurrency(customer.totalIssued, true)}</div>
+                            <div style={{ fontWeight: 600, fontSize: 13 }}>{formatCurrency(customer.totalIssued || 0, true)}</div>
                           </div>
                           <div style={{ textAlign: 'right' }}>
                             <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Outstanding</div>
                             <div style={{
                               fontWeight: 700, fontSize: 13,
-                              color: customer.outstanding > 0 ? 'var(--warning)' : 'var(--success)',
+                              color: (customer.outstanding || 0) > 0 ? 'var(--warning)' : 'var(--success)',
                             }}>
-                              {customer.outstanding > 0 ? formatCurrency(customer.outstanding, true) : 'Cleared'}
+                              {(customer.outstanding || 0) > 0 ? formatCurrency(customer.outstanding, true) : 'Cleared'}
                             </div>
                           </div>
-                          {customer.overdue > 0 && (
+                          {(customer.overdue || 0) > 0 && (
                             <div style={{ textAlign: 'right' }}>
                               <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Overdue</div>
                               <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--danger)' }}>
@@ -231,14 +262,18 @@ export default function CustomersList() {
                             </div>
                           )}
                           <StatusBadge status={customer.status} />
-                          <button className="btn btn-ghost btn-sm">Details</button>
+                          <Link to={`/contractors/${contractor.id}`} className="btn btn-ghost btn-sm">Details</Link>
                         </div>
                       </div>
                     ))}
 
                     {/* Add customer to this contractor */}
                     <div style={{ padding: '8px 18px 8px 44px' }}>
-                      <button className="btn btn-ghost btn-sm" style={{ color: 'var(--accent-400)', fontSize: 12 }}>
+                      <button
+                        className="btn btn-ghost btn-sm"
+                        style={{ color: 'var(--accent-400)', fontSize: 12 }}
+                        onClick={() => handleOpenAddModal(contractor.id)}
+                      >
                         <Plus size={12} /> Add customer to {contractor.name}
                       </button>
                     </div>
@@ -249,6 +284,13 @@ export default function CustomersList() {
           })}
         </div>
       )}
+
+      <AddCustomerModal
+        isOpen={showAddModal}
+        onClose={() => setShowAddModal(false)}
+        onSuccess={handleRefresh}
+        preselectedContractorId={selectedConId}
+      />
     </div>
   );
 }
