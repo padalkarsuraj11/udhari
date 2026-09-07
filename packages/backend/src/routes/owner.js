@@ -179,6 +179,7 @@ router.get('/dashboard', async (req, res, next) => {
       { count: totalTransactions },
       { data: transactionData },
       { data: recentTxns },
+      { data: paymentsData },
     ] = await Promise.all([
       supabase.from('contractors').select('*', { count: 'exact', head: true }).eq('tenant_id', tenantId),
       supabase.from('contractors').select('*', { count: 'exact', head: true }).eq('tenant_id', tenantId).eq('status', 'active'),
@@ -201,6 +202,8 @@ router.get('/dashboard', async (req, res, next) => {
         .eq('tenant_id', tenantId)
         .order('transaction_date', { ascending: false })
         .limit(10),
+      // Fix: query actual payments table for real collected amount (includes partial payments)
+      supabase.from('payments').select('amount').eq('tenant_id', tenantId),
     ]);
 
     // Calculate financial aggregates
@@ -210,7 +213,6 @@ router.get('/dashboard', async (req, res, next) => {
     let totalAdvanceReceived = 0;
     let totalOutstanding     = 0;
     let totalOverdue         = 0;
-    let totalPaid            = 0;
     let dueToday             = 0;
 
     for (const t of (transactionData || [])) {
@@ -224,16 +226,19 @@ router.get('/dashboard', async (req, res, next) => {
       if (['outstanding', 'partial', 'overdue'].includes(t.status)) {
         totalOutstanding += outstanding;
       }
+      // Fix: count overdue once — either by status OR by past due_date, not both
       if (t.status === 'overdue') {
         totalOverdue += outstanding;
-      }
-      if (t.status === 'paid') {
-        totalPaid += total;
+      } else if (['outstanding', 'partial'].includes(t.status) && t.due_date && t.due_date < today) {
+        totalOverdue += outstanding;
       }
       if (t.due_date === today && ['outstanding', 'partial'].includes(t.status)) {
         dueToday += outstanding;
       }
     }
+
+    // Fix: totalPaid = sum of actual payments received (correctly includes partial payments)
+    const totalPaid = (paymentsData || []).reduce((sum, p) => sum + parseFloat(p.amount || 0), 0);
 
     // Get top contractors by outstanding
     const { data: contractors } = await supabase

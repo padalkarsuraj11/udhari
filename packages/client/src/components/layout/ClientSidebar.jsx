@@ -1,12 +1,12 @@
 import { useState } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, Users, Home, Package, Receipt,
   CreditCard, AlertTriangle, MessageSquare, FileText,
   Settings, ChevronLeft, ChevronRight, Zap, LogOut,
-  Building2, TrendingDown
+  Building2, TrendingDown,
 } from 'lucide-react';
-import { CURRENT_OWNER } from '../../data/mockData';
+import { useAuth } from '../../contexts/AuthContext';
 import { initials } from '../../utils/format';
 
 const NAV_SECTIONS = [
@@ -19,46 +19,46 @@ const NAV_SECTIONS = [
   {
     label: 'Business',
     items: [
-      { label: 'Contractors',  icon: Users,     path: '/contractors' },
-      { label: 'Customers / Projects', icon: Home, path: '/customers' },
-      { label: 'Materials',    icon: Package,   path: '/materials' },
+      { label: 'Contractors',          icon: Users,      path: '/contractors' },
+      { label: 'Customers / Projects', icon: Home,       path: '/customers'   },
+      { label: 'Materials',            icon: Package,    path: '/materials'   },
     ],
   },
   {
     label: 'Finance',
     items: [
-      { label: 'Transactions', icon: Receipt,   path: '/transactions' },
-      { label: 'Payments',     icon: CreditCard, path: '/payments' },
-      { label: 'Bills',        icon: FileText,  path: '/bills' },
-      { label: 'Udhari / Outstanding', icon: TrendingDown, path: '/udhari', badge: '3' },
+      { label: 'Transactions',         icon: Receipt,     path: '/transactions' },
+      { label: 'Payments',             icon: CreditCard,  path: '/payments'     },
+      { label: 'Bills',                icon: FileText,    path: '/bills'        },
+      { label: 'Udhari / Outstanding', icon: TrendingDown,path: '/udhari'       },
     ],
   },
   {
     label: 'Risk & Communication',
     items: [
-      { label: 'Risk Monitoring', icon: AlertTriangle, path: '/risk', badge: '2' },
+      { label: 'Risk Monitoring', icon: AlertTriangle, path: '/risk'          },
       { label: 'Bill Requests',   icon: FileText,      path: '/bill-requests' },
-      { label: 'WhatsApp',        icon: MessageSquare, path: '/whatsapp' },
+      { label: 'WhatsApp',        icon: MessageSquare, path: '/whatsapp'      },
     ],
   },
   {
     label: 'Reports & Settings',
     items: [
-      { label: 'Reports',   icon: Building2, path: '/reports' },
-      { label: 'Settings',  icon: Settings,  path: '/settings' },
+      { label: 'Reports',  icon: Building2, path: '/reports'  },
+      { label: 'Settings', icon: Settings,  path: '/settings' },
     ],
   },
 ];
 
 export default function ClientSidebar() {
   const [collapsed, setCollapsed] = useState(false);
-  const location  = useLocation();
-  const navigate  = useNavigate();
+  const location   = useLocation();
+  const { user, userProfile, businessName, signOut } = useAuth();
 
-  function handleLogout() {
-    localStorage.removeItem('client_auth');
-    navigate('/login');
-  }
+  // Derive display names from real auth context
+  const displayName     = userProfile?.full_name || user?.full_name || user?.name || user?.email || 'Owner';
+  const displayBusiness = businessName || 'Business';
+  const displayType     = userProfile?.tenant?.business_type || 'Material';
 
   return (
     <aside className={`sidebar ${collapsed ? 'collapsed' : ''}`}>
@@ -68,8 +68,8 @@ export default function ClientSidebar() {
           <Zap size={18} color="white" />
         </div>
         <div className="sidebar-logo-text">
-          <h2>{CURRENT_OWNER.businessName}</h2>
-          <span>{CURRENT_OWNER.businessType} Supplier</span>
+          <h2 title={displayBusiness}>{displayBusiness}</h2>
+          <span>{displayType} Supplier</span>
         </div>
       </div>
 
@@ -112,11 +112,11 @@ export default function ClientSidebar() {
               fontSize: 12, fontWeight: 700, color: 'white', flexShrink: 0,
             }}
           >
-            {initials(CURRENT_OWNER.name)}
+            {initials(displayName)}
           </div>
           <div className="sidebar-logo-text" style={{ overflow: 'hidden' }}>
             <div style={{ fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              {CURRENT_OWNER.name}
+              {displayName}
             </div>
             <div style={{ fontSize: 10, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>Owner</div>
           </div>
@@ -124,7 +124,7 @@ export default function ClientSidebar() {
 
         <div
           className="nav-item"
-          onClick={handleLogout}
+          onClick={signOut}
           style={{ color: 'var(--danger)', cursor: 'pointer', margin: '0 0 8px 0' }}
           title={collapsed ? 'Logout' : ''}
         >

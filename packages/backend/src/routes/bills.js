@@ -137,6 +137,7 @@ router.post('/', async (req, res, next) => {
         subtotal:      parseFloat(subtotal) || 0,
         tax_amount:    parseFloat(tax_amount) || 0,
         total_amount:  parseFloat(total_amount) || 0,
+        paid_amount:   0,
         status:        'sent',
         notes:         notes || null,
       })
@@ -152,6 +153,8 @@ router.post('/', async (req, res, next) => {
       quantity:    parseFloat(item.quantity) || 1,
       unit:        item.unit || 'piece',
       rate:        parseFloat(item.rate) || 0,
+      // Fix: store computed amount so detail view always shows correct line totals
+      amount:      (parseFloat(item.quantity) || 1) * (parseFloat(item.rate) || 0),
     }));
 
     const { error: itemsErr } = await supabase

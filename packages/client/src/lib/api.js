@@ -92,10 +92,14 @@ export async function updateContractor(id, payload) {
 // CUSTOMERS
 // ═══════════════════════════════════════════
 
+// contractorId = null   → skip the request entirely (not ready yet)
+// contractorId = 'ALL'  → fetch all customers (no filter)
+// contractorId = <uuid>  → fetch customers for that contractor
 export function useCustomers(contractorId = null) {
   return useApiData(
     () => {
-      const qs = contractorId ? `?contractor_id=${contractorId}` : '';
+      if (contractorId === null) return Promise.resolve([]);   // not ready
+      const qs = contractorId !== 'ALL' ? `?contractor_id=${contractorId}` : '';
       return apiFetch(`/customers${qs}`).then(r => r.customers || []);
     },
     [contractorId]
@@ -104,6 +108,17 @@ export function useCustomers(contractorId = null) {
 
 export async function createCustomer(payload) {
   return apiFetch('/customers', { method: 'POST', body: JSON.stringify(payload) });
+}
+
+export function useCustomer(id) {
+  return useApiData(
+    () => apiFetch(`/customers/${id}`),
+    [id]
+  );
+}
+
+export async function updateCustomer(id, payload) {
+  return apiFetch(`/customers/${id}`, { method: 'PUT', body: JSON.stringify(payload) });
 }
 
 // ═══════════════════════════════════════════
@@ -122,6 +137,10 @@ export function useTransactions(params = {}) {
 
 export async function createTransaction(payload) {
   return apiFetch('/transactions', { method: 'POST', body: JSON.stringify(payload) });
+}
+
+export async function deleteTransaction(id) {
+  return apiFetch(`/transactions/${id}`, { method: 'DELETE' });
 }
 
 // ═══════════════════════════════════════════
@@ -210,13 +229,6 @@ export async function updateBillStatus(id, status) {
 }
 
 export async function updateTenantProfile(payload) {
-  // Let's create an endpoint in owner/profile for updating if needed,
-  // or use the admin route or tenant update. Wait, do we have PUT /api/owner/profile?
-  // Let's check owner.js.
-  // Oh, wait, in owner.js: we only have GET /profile and GET /dashboard.
-  // Let's see if we need a PUT /profile or we can just mock the update success/alert,
-  // or implement a quick PUT /profile in owner.js backend so SettingsPage works for real!
-  // Let's do a real PUT /profile.
   return apiFetch('/owner/profile', { method: 'PUT', body: JSON.stringify(payload) });
 }
 

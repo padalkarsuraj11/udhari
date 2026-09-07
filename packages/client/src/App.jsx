@@ -6,8 +6,10 @@ import OwnerDashboard    from './pages/dashboard/OwnerDashboard';
 import ContractorsList   from './pages/contractors/ContractorsList';
 import ContractorDetails from './pages/contractors/ContractorDetails';
 import CustomersList     from './pages/customers/CustomersList';
+import CustomerLedger   from './pages/customers/CustomerLedger';
+import BillsPage from './pages/bills/BillsPage';
 import {
-  MaterialsPage, TransactionsPage, PaymentsPage, BillsPage,
+  MaterialsPage, TransactionsPage, PaymentsPage,
   UdhariPage, RiskPage, BillRequestsPage, WhatsAppPage,
   ReportsPage, SettingsPage,
 } from './pages/Placeholders';
@@ -83,11 +85,12 @@ export default function App() {
           <Route index             element={<Navigate to="/dashboard" replace />} />
           <Route path="dashboard"  element={<OwnerDashboard />} />
 
-          {/* Business */}
-          <Route path="contractors"      element={<ContractorsList />} />
-          <Route path="contractors/:id"  element={<ContractorDetails />} />
-          <Route path="customers"        element={<CustomersList />} />
-          <Route path="materials"        element={<MaterialsPage />} />
+          {/* Business — most-specific routes first */}
+          <Route path="contractors"        element={<ContractorsList />} />
+          <Route path="contractors/:contractorId/customers/:customerId" element={<CustomerLedger />} />
+          <Route path="contractors/:id"    element={<ContractorDetails />} />
+          <Route path="customers"          element={<CustomersList />} />
+          <Route path="materials"          element={<MaterialsPage />} />
 
           {/* Finance */}
           <Route path="transactions" element={<TransactionsPage />} />

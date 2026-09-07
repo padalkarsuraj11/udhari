@@ -107,18 +107,25 @@ router.post('/', async (req, res, next) => {
 
     if (payErr) throw payErr;
 
-    // If linked to a specific transaction, update it
+    // Update material_transactions
+    let remainingPayment = paymentAmt;
+
+    // 1. If linked to a specific transaction, apply to it first
     if (transaction_id) {
       const { data: txn } = await supabase
         .from('material_transactions')
-        .select('total_amount, advance_amount, outstanding_amount, status')
+        .select('id, total_amount, advance_amount, status')
         .eq('tenant_id', tenantId)
         .eq('id', transaction_id)
         .single();
 
       if (txn) {
-        const newAdvance     = parseFloat(txn.advance_amount || 0) + paymentAmt;
-        const total          = parseFloat(txn.total_amount || 0);
+        const total      = parseFloat(txn.total_amount || 0);
+        const currentAdv = parseFloat(txn.advance_amount || 0);
+        const needed     = Math.max(0, total - currentAdv);
+        const toApply    = Math.min(remainingPayment, needed > 0 ? needed : remainingPayment);
+
+        const newAdvance     = currentAdv + toApply;
         const newOutstanding = Math.max(0, total - newAdvance);
         let   newStatus      = 'outstanding';
         if (newAdvance >= total)  newStatus = 'paid';
@@ -127,11 +134,63 @@ router.post('/', async (req, res, next) => {
         await supabase
           .from('material_transactions')
           .update({
-            advance_amount: newAdvance,
-            status:         newStatus,
+            advance_amount:      newAdvance,
+            outstanding_amount:  newOutstanding,
+            status:              newStatus,
           })
           .eq('tenant_id', tenantId)
           .eq('id', transaction_id);
+
+        remainingPayment -= toApply;
+      }
+    }
+
+    // 2. If there is remaining payment (or no transaction_id was given),
+    // allocate to open transactions for this contractor/customer (FIFO: oldest first)
+    if (remainingPayment > 0 && contractor_id) {
+      let query = supabase
+        .from('material_transactions')
+        .select('id, total_amount, advance_amount, status, transaction_date')
+        .eq('tenant_id', tenantId)
+        .eq('contractor_id', contractor_id)
+        .in('status', ['outstanding', 'partial', 'overdue'])
+        .order('transaction_date', { ascending: true })
+        .order('created_at', { ascending: true });
+
+      if (customer_id) {
+        query = query.eq('customer_id', customer_id);
+      }
+      if (transaction_id) {
+        query = query.neq('id', transaction_id);
+      }
+
+      const { data: openTxns } = await query;
+
+      for (const txn of (openTxns || [])) {
+        if (remainingPayment <= 0) break;
+        const total      = parseFloat(txn.total_amount || 0);
+        const currentAdv = parseFloat(txn.advance_amount || 0);
+        const needed     = Math.max(0, total - currentAdv);
+        if (needed <= 0) continue;
+
+        const toApply        = Math.min(remainingPayment, needed);
+        const newAdvance     = currentAdv + toApply;
+        const newOutstanding = Math.max(0, total - newAdvance);
+        let   newStatus      = 'outstanding';
+        if (newAdvance >= total)  newStatus = 'paid';
+        else if (newAdvance > 0)  newStatus = 'partial';
+
+        await supabase
+          .from('material_transactions')
+          .update({
+            advance_amount:     newAdvance,
+            outstanding_amount: newOutstanding,
+            status:             newStatus,
+          })
+          .eq('tenant_id', tenantId)
+          .eq('id', txn.id);
+
+        remainingPayment -= toApply;
       }
     }
 

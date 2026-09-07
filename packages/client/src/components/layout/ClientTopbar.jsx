@@ -1,6 +1,6 @@
-import { Bell, Search, HelpCircle } from 'lucide-react';
+import { Bell, HelpCircle } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
-import { CURRENT_OWNER } from '../../data/mockData';
+import { useAuth } from '../../contexts/AuthContext';
 import { initials } from '../../utils/format';
 
 const BREADCRUMB_MAP = {
@@ -21,14 +21,19 @@ const BREADCRUMB_MAP = {
 
 export default function ClientTopbar() {
   const location = useLocation();
-  const parts    = location.pathname.split('/').filter(Boolean);
-  const current  = BREADCRUMB_MAP['/' + parts[0]] || parts[parts.length - 1] || 'Dashboard';
+  const { user, userProfile, businessName } = useAuth();
+
+  const parts   = location.pathname.split('/').filter(Boolean);
+  const current = BREADCRUMB_MAP['/' + parts[0]] || parts[parts.length - 1] || 'Dashboard';
+
+  const displayName     = userProfile?.full_name || user?.full_name || user?.name || user?.email || 'Owner';
+  const displayBusiness = businessName || 'Business';
 
   return (
     <header className="topbar">
       <div className="topbar-left">
         <div className="topbar-breadcrumb">
-          <span>{CURRENT_OWNER.businessName}</span>
+          <span>{displayBusiness}</span>
           <span style={{ color: 'var(--text-muted)' }}>›</span>
           <span className="current">{current}</span>
         </div>
@@ -43,11 +48,11 @@ export default function ClientTopbar() {
           <HelpCircle size={17} />
         </button>
         <div style={{ width: 1, height: 24, background: 'var(--border)' }} />
-        <div className="topbar-avatar" title={CURRENT_OWNER.name}>
-          {initials(CURRENT_OWNER.name)}
+        <div className="topbar-avatar" title={displayName}>
+          {initials(displayName)}
         </div>
         <div style={{ display: 'flex', flexDirection: 'column' }}>
-          <span style={{ fontSize: 13, fontWeight: 600 }}>{CURRENT_OWNER.name}</span>
+          <span style={{ fontSize: 13, fontWeight: 600 }}>{displayName}</span>
           <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Owner</span>
         </div>
       </div>

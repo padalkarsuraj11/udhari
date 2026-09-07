@@ -163,6 +163,7 @@ router.post('/', async (req, res, next) => {
 
     const total   = parseFloat(total_amount);
     const advance = parseFloat(advance_amount) || 0;
+    const outstandingAmt = Math.max(0, total - advance);
 
     let status = 'outstanding';
     if (advance >= total)  status = 'paid';
@@ -171,16 +172,17 @@ router.post('/', async (req, res, next) => {
     const { data, error } = await supabase
       .from('material_transactions')
       .insert({
-        tenant_id:        tenantId,
+        tenant_id:          tenantId,
         contractor_id,
-        customer_id:      customer_id || null,
-        description:      description?.trim() || null,
-        total_amount:     total,
-        advance_amount:   advance,
-        transaction_date: transaction_date || new Date().toISOString().split('T')[0],
-        due_date:         due_date || null,
+        customer_id:        customer_id || null,
+        description:        description?.trim() || null,
+        total_amount:       total,
+        advance_amount:     advance,
+        // outstanding_amount is a generated column — computed by DB automatically
+        transaction_date:   transaction_date || new Date().toISOString().split('T')[0],
+        due_date:           due_date || null,
         status,
-        notes:            notes?.trim() || null,
+        notes:              notes?.trim() || null,
       })
       .select(`
         id, transaction_date, description, total_amount, advance_amount,
@@ -190,6 +192,27 @@ router.post('/', async (req, res, next) => {
       .single();
 
     if (error) throw error;
+
+    // If advance payment was collected, record it in payments table
+    if (advance > 0 && data?.id) {
+      try {
+        await supabase
+          .from('payments')
+          .insert({
+            tenant_id:      tenantId,
+            contractor_id,
+            customer_id:    customer_id || null,
+            transaction_id: data.id,
+            amount:         advance,
+            payment_method: req.body.payment_method || 'cash',
+            payment_date:   transaction_date || new Date().toISOString().split('T')[0],
+            reference:      req.body.payment_reference?.trim() || null,
+            notes:          'Advance payment at issue',
+          });
+      } catch (payErr) {
+        console.warn('Non-fatal: failed to record advance payment entry:', payErr);
+      }
+    }
 
     res.status(201).json({
       transaction: {
@@ -240,6 +263,35 @@ router.put('/:id', async (req, res, next) => {
 
     if (error) throw error;
     res.json({ transaction: data, message: 'Transaction updated' });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ─────────────────────────────────────────────
+// DELETE /api/transactions/:id  — Cancel transaction (soft delete)
+// ─────────────────────────────────────────────
+router.delete('/:id', async (req, res, next) => {
+  try {
+    const tenantId = req.tenantId;
+    const { id }   = req.params;
+
+    if (!supabase || !tenantId) {
+      return res.status(503).json({ error: 'DB_UNAVAILABLE', message: 'Database not configured' });
+    }
+
+    const { data, error } = await supabase
+      .from('material_transactions')
+      .update({ status: 'cancelled' })
+      .eq('tenant_id', tenantId)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) throw error;
+    if (!data) return res.status(404).json({ error: 'NOT_FOUND', message: 'Transaction not found' });
+
+    res.json({ message: 'Transaction cancelled successfully' });
   } catch (err) {
     next(err);
   }

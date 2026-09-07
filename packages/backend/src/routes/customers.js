@@ -49,19 +49,39 @@ router.get('/', async (req, res, next) => {
     for (const t of (txns || [])) {
       const cid = t.customer_id;
       if (!cid) continue;
-      if (!financialsMap[cid]) financialsMap[cid] = { totalIssued: 0, totalPaid: 0, outstanding: 0, overdue: 0 };
+      if (!financialsMap[cid]) financialsMap[cid] = { totalIssued: 0, outstanding: 0, overdue: 0 };
       const f   = financialsMap[cid];
       const amt = parseFloat(t.total_amount || 0);
       const adv = parseFloat(t.advance_amount || 0);
-      const os  = parseFloat(t.outstanding_amount || 0);
+      // Always compute outstanding from total - advance (source of truth, never stale)
+      const os  = Math.max(0, amt - adv);
       f.totalIssued += amt;
-      if (t.status === 'paid') f.totalPaid += amt;
-      else f.totalPaid += adv;
       if (['outstanding', 'partial', 'overdue'].includes(t.status)) f.outstanding += os;
-      if (t.status === 'overdue') f.overdue += os;
-      if (['outstanding', 'partial'].includes(t.status) && t.due_date && t.due_date < today) {
+      // Fix: count overdue once — either by status OR by past due_date, not both
+      if (t.status === 'overdue') {
+        f.overdue += os;
+      } else if (['outstanding', 'partial'].includes(t.status) && t.due_date && t.due_date < today) {
         f.overdue += os;
       }
+    }
+
+    // Fix: totalPaid per customer from actual payments table
+    const customerIds = Object.keys(financialsMap);
+    const paymentsPerCustomer = {};
+    if (customerIds.length > 0) {
+      const { data: allPayments } = await supabase
+        .from('payments')
+        .select('customer_id, amount')
+        .eq('tenant_id', tenantId)
+        .in('customer_id', customerIds);
+      for (const p of (allPayments || [])) {
+        if (!paymentsPerCustomer[p.customer_id]) paymentsPerCustomer[p.customer_id] = 0;
+        paymentsPerCustomer[p.customer_id] += parseFloat(p.amount || 0);
+      }
+    }
+    // Attach totalPaid from payments table
+    for (const cid of customerIds) {
+      financialsMap[cid].totalPaid = paymentsPerCustomer[cid] || 0;
     }
 
     const result = (customers || []).map(c => {
@@ -133,18 +153,24 @@ router.get('/:id', async (req, res, next) => {
       .order('payment_date', { ascending: false });
 
     const today = new Date().toISOString().split('T')[0];
-    let totalIssued = 0, totalPaid = 0, outstanding = 0, overdue = 0;
+    let totalIssued = 0, outstanding = 0, overdue = 0;
     for (const t of (transactions || [])) {
       const amt = parseFloat(t.total_amount || 0);
       const adv = parseFloat(t.advance_amount || 0);
-      const os  = parseFloat(t.outstanding_amount || 0);
+      // Always compute outstanding from total - advance (source of truth, never stale)
+      const os  = Math.max(0, amt - adv);
       totalIssued += amt;
-      if (t.status === 'paid') totalPaid += amt;
-      else totalPaid += adv;
       if (['outstanding', 'partial', 'overdue'].includes(t.status)) outstanding += os;
-      if (t.status === 'overdue') overdue += os;
-      if (['outstanding', 'partial'].includes(t.status) && t.due_date && t.due_date < today) overdue += os;
+      // Fix: count overdue once — either by status OR by past due_date, not both
+      if (t.status === 'overdue') {
+        overdue += os;
+      } else if (['outstanding', 'partial'].includes(t.status) && t.due_date && t.due_date < today) {
+        overdue += os;
+      }
     }
+
+    // Fix: totalPaid = sum from actual payments table (correctly includes partial payments)
+    const totalPaid = (payments || []).reduce((sum, p) => sum + parseFloat(p.amount || 0), 0);
 
     res.json({
       customer: {
@@ -163,17 +189,23 @@ router.get('/:id', async (req, res, next) => {
         outstanding,
         overdue,
       },
-      transactions: (transactions || []).map(t => ({
-        id:          t.id,
-        date:        t.transaction_date,
-        description: t.description,
-        amount:      parseFloat(t.total_amount || 0),
-        advance:     parseFloat(t.advance_amount || 0),
-        outstanding: parseFloat(t.outstanding_amount || 0),
-        status:      t.status,
-        dueDate:     t.due_date,
-        notes:       t.notes,
-      })),
+      transactions: (transactions || []).map(t => {
+        const totalAmt = parseFloat(t.total_amount || 0);
+        const advance  = parseFloat(t.advance_amount || 0);
+        // Always compute outstanding from total - advance (not from stale outstanding_amount column)
+        const os = Math.max(0, totalAmt - advance);
+        return {
+          id:          t.id,
+          date:        t.transaction_date,
+          description: t.description,
+          amount:      totalAmt,
+          advance,
+          outstanding: os,
+          status:      t.status,
+          dueDate:     t.due_date,
+          notes:       t.notes,
+        };
+      }),
       payments: (payments || []).map(p => ({
         id:        p.id,
         date:      p.payment_date,

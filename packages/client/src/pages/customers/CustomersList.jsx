@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { Plus, Home, ChevronRight, ChevronDown } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Plus, Home, ChevronRight, ChevronDown, Zap } from 'lucide-react';
 import { useCustomers, useContractors } from '../../lib/api';
 import { formatCurrency } from '../../utils/format';
 import { PageHeader, SearchInput, Select, StatusBadge, Avatar, EmptyState, LoadingState, ErrorState } from '../../components/ui';
-import { AddCustomerModal } from '../../components/modals';
+import { AddCustomerModal, AssignMaterialToCustomerModal, RecordPaymentModal } from '../../components/modals';
 
 const TYPE_OPTIONS = [
   { value: 'Residential', label: 'Residential' },
@@ -18,7 +19,7 @@ const STATUS_OPTIONS = [
 ];
 
 export default function CustomersList() {
-  const { data: customers, loading: loadingCustomers, error: errorCustomers, refetch: refetchCustomers } = useCustomers();
+  const { data: customers, loading: loadingCustomers, error: errorCustomers, refetch: refetchCustomers } = useCustomers('ALL');
   const { data: contractors, loading: loadingContractors, error: errorContractors, refetch: refetchContractors } = useContractors();
 
   const [search,           setSearch]           = useState('');
@@ -27,6 +28,8 @@ export default function CustomersList() {
   const [contractorFilter, setContractorFilter] = useState('');
   const [showAddModal,     setShowAddModal]     = useState(false);
   const [selectedConId,    setSelectedConId]    = useState(null);
+  const [assignModalCustomer, setAssignModalCustomer] = useState(null);
+  const [payModalCustomer, setPayModalCustomer] = useState(null);
 
   const [expandedContractors, setExpandedContractors] = useState({});
 
@@ -261,8 +264,54 @@ export default function CustomersList() {
                               </div>
                             </div>
                           )}
-                          <StatusBadge status={customer.status} />
-                          <Link to={`/contractors/${contractor.id}`} className="btn btn-ghost btn-sm">Details</Link>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <StatusBadge status={customer.status} />
+                            <Link
+                              to={`/contractors/${contractor.id}/customers/${customer.id}`}
+                              className="btn btn-ghost btn-sm"
+                              style={{ fontWeight: 600 }}
+                            >
+                              View Ledger →
+                            </Link>
+                            {(customer.outstanding || 0) > 0 && (
+                              <button
+                                className="btn btn-sm"
+                                style={{
+                                  background: 'linear-gradient(135deg, #22c55e, #16a34a)',
+                                  border: 'none', color: '#fff', fontWeight: 700, fontSize: 11,
+                                  display: 'flex', alignItems: 'center', gap: 4,
+                                  padding: '5px 10px',
+                                  boxShadow: '0 2px 6px rgba(34,197,94,0.3)',
+                                }}
+                                onClick={() => setPayModalCustomer({
+                                  id:             customer.id,
+                                  name:           customer.name,
+                                  contractorId:   contractor.id,
+                                  contractorName: contractor.name,
+                                  outstanding:    customer.outstanding,
+                                })}
+                              >
+                                <Zap size={11} /> Pay ₹{(customer.outstanding || 0).toLocaleString('en-IN')}
+                              </button>
+                            )}
+                            <button
+                              className="btn btn-ghost btn-sm"
+                              style={{
+                                color: 'var(--accent-400)', fontWeight: 600, fontSize: 12,
+                                border: '1px solid rgba(251,191,36,0.25)',
+                                borderRadius: 'var(--radius-md)',
+                                padding: '4px 10px',
+                              }}
+                              onClick={() => setAssignModalCustomer({
+                                id:             customer.id,
+                                name:           customer.name,
+                                contractorId:   contractor.id,
+                                contractorName: contractor.name,
+                              })}
+                            >
+                              📦 Material
+                            </button>
+                          </div>
                         </div>
                       </div>
                     ))}
@@ -291,6 +340,25 @@ export default function CustomersList() {
         onSuccess={handleRefresh}
         preselectedContractorId={selectedConId}
       />
+
+      <AssignMaterialToCustomerModal
+        isOpen={Boolean(assignModalCustomer)}
+        onClose={() => setAssignModalCustomer(null)}
+        onSuccess={handleRefresh}
+        customer={assignModalCustomer}
+      />
+
+      {payModalCustomer && (
+        <RecordPaymentModal
+          isOpen={Boolean(payModalCustomer)}
+          onClose={() => setPayModalCustomer(null)}
+          onSuccess={() => { setPayModalCustomer(null); handleRefresh(); }}
+          preselectedContractorId={payModalCustomer.contractorId}
+          preselectedCustomerId={payModalCustomer.id}
+          preselectedCustomerName={payModalCustomer.name}
+          outstandingAmount={payModalCustomer.outstanding}
+        />
+      )}
     </div>
   );
 }

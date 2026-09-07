@@ -218,12 +218,26 @@ export default function ContractorsList() {
                           <Package size={12} style={{ marginRight: 2 }} /> Issue
                         </button>
                         <button
-                          className="btn btn-secondary btn-xs"
+                          className="btn btn-xs"
                           title="Record Payment (Collections)"
-                          style={{ padding: '4px 8px', fontSize: 11 }}
+                          style={{
+                            padding: '4px 10px', fontSize: 11,
+                            background: (c.outstanding || 0) > 0
+                              ? 'linear-gradient(135deg, #22c55e, #16a34a)'
+                              : 'var(--bg-surface)',
+                            border: (c.outstanding || 0) > 0 ? 'none' : '1px solid var(--border)',
+                            color: (c.outstanding || 0) > 0 ? '#fff' : 'var(--text-secondary)',
+                            fontWeight: 700,
+                            boxShadow: (c.outstanding || 0) > 0 ? '0 2px 6px rgba(34,197,94,0.35)' : 'none',
+                            display: 'flex', alignItems: 'center', gap: 4,
+                            transition: 'all 0.2s ease',
+                          }}
                           onClick={() => { setSelectedConId(c.id); setOutstandingAmt(c.outstanding); setShowPayment(true); }}
                         >
-                          <IndianRupee size={12} style={{ marginRight: 2 }} /> Pay
+                          <IndianRupee size={11} />
+                          {(c.outstanding || 0) > 0
+                            ? `Pay ₹${(c.outstanding).toLocaleString('en-IN')}`
+                            : 'Pay'}
                         </button>
                       </div>
                     </td>
